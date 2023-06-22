@@ -7,6 +7,10 @@
 #include "Adafruit_GFX.h"
 #include "Adafruit_SSD1306.h"
 
+//custom fonts
+#include <Fonts/FreeSans18pt7b.h>
+#include <Fonts/FreeSans9pt7b.h>
+
 //OLED Defines
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
@@ -18,7 +22,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #define ONE_WIRE_BUS 32
 
 //TempSensor setup
-#define DS18B20RESOLUTION 12          //12 bit
+#define DS18B20RESOLUTION 11          //12 bit
 OneWire oneWire(ONE_WIRE_BUS); 
 DallasTemperature sensor_1(&oneWire);
 static uint8_t address_1[3];
@@ -30,7 +34,7 @@ uint8_t i = 0, j=0, tempIter = 0;
 float temperatures1[128], temperatures2[128], temperatures3[128];
 
 //States
-#define pageButtonPin 35
+#define pageButtonPin 26
 #define timerButtonPin 14
 static uint8_t pageButtonState, lastPageButtonState=0;
 static uint8_t timerButtonState, lastTimerButtonState=0;
@@ -40,11 +44,16 @@ static uint8_t pageState = 0;
 static unsigned long customTime = 0,startcustomTime = 0;
 bool customTimerStarted = false;
 
+// temps  
+float temp_1;
+float temp_2;
+float temp_3;
+
 
 //Predefinitions
 uint8_t readPageButton(void);
 uint8_t readTimerButton(void);
-void plotArray(float array[]);
+void plotArray(float main_array[], float second_array[]);
 
 void setup() {
   /*--- Buttons ---*/
@@ -57,10 +66,10 @@ void setup() {
   sensor_1.begin();
   sensor_1.getAddress(&address_1[0], 0);
   sensor_1.setResolution(&address_1[0],DS18B20RESOLUTION);
-  sensor_1.getAddress(&address_1[1], 1);
-  sensor_1.setResolution(&address_1[1],DS18B20RESOLUTION);
-  //sensor_1.getAddress(&address_1[2], 2);
-  //sensor_1.setResolution(&address_1[2],DS18B20RESOLUTION);
+  // sensor_1.getAddress(&address_1[1], 1);
+  // sensor_1.setResolution(&address_1[1],DS18B20RESOLUTION);
+  // sensor_1.getAddress(&address_1[2], 2);
+  // sensor_1.setResolution(&address_1[2],DS18B20RESOLUTION);
   
   Serial.begin(9600); 
 
@@ -100,13 +109,15 @@ void setup() {
 }
 
 void loop() {
-  //Get Temperatures
-  sensor_1.requestTemperatures();
-  float temp_1 = sensor_1.getTempCByIndex(0);
-  float temp_2 = sensor_1.getTempCByIndex(1);
-  float temp_3 = sensor_1.getTempCByIndex(2);
   //Serial.printf("%.3f;%.3f;%.3f\n",temp_1,temp_2,temp_3);
-  if(millis()%100 == 0){
+  if(millis()%400 == 0){
+    //Get temperatures
+    sensor_1.requestTemperatures();
+    temp_1 = sensor_1.getTempCByIndex(0);
+    temp_2 = sensor_1.getTempCByIndex(1);
+    temp_3 = sensor_1.getTempCByIndex(2);
+
+    // write temperatures
     temperatures1[tempIter] = temp_1;
     temperatures2[tempIter] = temp_2;
     temperatures3[tempIter] = temp_3;
@@ -129,6 +140,7 @@ void loop() {
             //Display Temperatures
             display.clearDisplay();
             display.setTextColor(SSD1306_WHITE);
+            display.setFont();
             
             //Labels
             display.setTextSize(1);
@@ -165,33 +177,44 @@ void loop() {
             display.clearDisplay();
             display.setTextColor(SSD1306_WHITE);
             //Labels
-            display.setTextSize(4);
-            display.setCursor(0,0);
-            display.printf("%.2f",(float) customTime/1000.0);
+            display.setFont(&FreeSans18pt7b);
+            //display.setTextSize(4);
+            display.setCursor(0,25);
+            display.printf("%.1f",(float) customTime/1000.0);
+            display.setFont(&FreeSans9pt7b);
+            display.setCursor(70,13);
+            display.printf("%.1fC",(float) abs(temp_3));
             
 
             //Graphics
-            float totalTime = 25.5, preInfusion = 6.1;
+            float totalTime = 25.5, preInfusion = 8.0;
             float firstBlock = preInfusion/(totalTime+5)*128.0;
             display.drawRect(0,32,int(firstBlock),16,SSD1306_WHITE);
             display.drawRect(int(firstBlock)-1,32,int((totalTime/preInfusion-1)*firstBlock),16,SSD1306_WHITE);
 
             //Text
+            display.setFont();
             display.setTextSize(1);
             display.setCursor(3,36);
             display.printf("Pre");
             display.setCursor(int(firstBlock)+1,36);
             display.printf("Infusion");
-            display.fillRect(0,48,int(customTime/(1000.0*preInfusion)*firstBlock),16,SSD1306_WHITE);
+            display.fillRect(0,47,int(customTime/(1000.0*preInfusion)*firstBlock),16,SSD1306_WHITE);
             display.display();
             }break;
     case 2: {
-            plotArray(temperatures1);
+            plotArray(temperatures1, temperatures3);
             }break;
   }
 }
 
 /*User Defines*/
+
+
+void temp_task(){
+
+  
+}
 
 uint8_t readPageButton(void){
   pageButtonState = digitalRead(pageButtonPin);
@@ -209,17 +232,20 @@ uint8_t readTimerButton(void){
   //TBD edge detection
   if(timerButtonState && !lastTimerButtonState){
     lastTimerButtonState = timerButtonState;
-    Serial.print("1");
     return 1;
   }
   lastTimerButtonState = timerButtonState;
   return 0;
 }
 
-void plotArray(float array[]){
+void plotArray(float main_array[], float second_array[]){
   display.clearDisplay();
   for(j = 0; j<128; j++){
-    display.drawPixel(j, abs(array[j]/2),SSD1306_WHITE);
+    display.drawPixel(j, abs(main_array[j]/2),SSD1306_WHITE);
+    if(j%3==0){
+      display.drawPixel(j, abs(second_array[j]/2),SSD1306_WHITE);
+    }
+    
   }
   display.display();
 }
