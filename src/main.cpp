@@ -22,13 +22,13 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #define ONE_WIRE_BUS 32
 
 //TempSensor setup
-#define DS18B20RESOLUTION 11          //12 bit
+#define DS18B20RESOLUTION 9          //12 bit
 OneWire oneWire(ONE_WIRE_BUS); 
 DallasTemperature sensor_1(&oneWire);
 static uint8_t address_1[3];
 
 //Iterables
-uint8_t i = 0, j=0, tempIter = 0;
+uint8_t i = 0, j=0, tempIter = 0, readIter = 0;
 
 //Arrays
 float temperatures1[128], temperatures2[128], temperatures3[128];
@@ -42,6 +42,7 @@ static uint8_t pageState = 0;
 
 //Timer
 static unsigned long customTime = 0,startcustomTime = 0;
+static unsigned long temp_time = millis();
 bool customTimerStarted = false;
 
 // temps  
@@ -53,7 +54,8 @@ float temp_3;
 //Predefinitions
 uint8_t readPageButton(void);
 uint8_t readTimerButton(void);
-void plotArray(float main_array[], float second_array[]);
+void plotArray(float main_array[], float second_array[],float third_array[]);
+void get_temp();
 
 void setup() {
   /*--- Buttons ---*/
@@ -66,10 +68,10 @@ void setup() {
   sensor_1.begin();
   sensor_1.getAddress(&address_1[0], 0);
   sensor_1.setResolution(&address_1[0],DS18B20RESOLUTION);
-  // sensor_1.getAddress(&address_1[1], 1);
-  // sensor_1.setResolution(&address_1[1],DS18B20RESOLUTION);
-  // sensor_1.getAddress(&address_1[2], 2);
-  // sensor_1.setResolution(&address_1[2],DS18B20RESOLUTION);
+  sensor_1.getAddress(&address_1[1], 1);
+  sensor_1.setResolution(&address_1[1],DS18B20RESOLUTION);
+  sensor_1.getAddress(&address_1[2], 2);
+  sensor_1.setResolution(&address_1[2],DS18B20RESOLUTION);
   
   Serial.begin(9600); 
 
@@ -106,27 +108,15 @@ void setup() {
   display.clearDisplay();
   display.display();
 
+  // get first temperatures
+  get_temp();
+
 }
 
 void loop() {
-  //Serial.printf("%.3f;%.3f;%.3f\n",temp_1,temp_2,temp_3);
-  if(millis()%400 == 0){
-    //Get temperatures
-    sensor_1.requestTemperatures();
-    temp_1 = sensor_1.getTempCByIndex(0);
-    temp_2 = sensor_1.getTempCByIndex(1);
-    temp_3 = sensor_1.getTempCByIndex(2);
-
-    // write temperatures
-    temperatures1[tempIter] = temp_1;
-    temperatures2[tempIter] = temp_2;
-    temperatures3[tempIter] = temp_3;
-
-    if(tempIter<128){
-      tempIter++;
-    }else{
-      tempIter = 0;
-    }
+  if((millis()-temp_time) >= 1000){
+    get_temp();
+    temp_time = millis();
   }
   //States
   if(readPageButton()){
@@ -162,6 +152,7 @@ void loop() {
             display.display();
             delay(10);
             }break;
+
     case 1: {
             if(readTimerButton()){
               if(!customTimerStarted){
@@ -202,8 +193,9 @@ void loop() {
             display.fillRect(0,47,int(customTime/(1000.0*preInfusion)*firstBlock),16,SSD1306_WHITE);
             display.display();
             }break;
+
     case 2: {
-            plotArray(temperatures1, temperatures3);
+            plotArray(temperatures1,temperatures2, temperatures3);
             }break;
   }
 }
@@ -211,9 +203,26 @@ void loop() {
 /*User Defines*/
 
 
-void temp_task(){
+void get_temp(){
+  //Get temperatures
+    sensor_1.requestTemperatures();
+    temp_1 = sensor_1.getTempCByIndex(0);
+    temp_2 = sensor_1.getTempCByIndex(1);
+    temp_3 = sensor_1.getTempCByIndex(2);
 
-  
+    if(readIter%5 == 0){
+      // write temperatures
+      temperatures1[tempIter] = temp_1;
+      temperatures2[tempIter] = temp_2;
+      temperatures3[tempIter] = temp_3;
+
+      if(tempIter<128){
+        tempIter++;
+      }else{
+        tempIter = 0;
+      }
+    }
+    readIter++;
 }
 
 uint8_t readPageButton(void){
@@ -238,12 +247,15 @@ uint8_t readTimerButton(void){
   return 0;
 }
 
-void plotArray(float main_array[], float second_array[]){
+void plotArray(float main_array[], float second_array[],float third_array[]){
   display.clearDisplay();
   for(j = 0; j<128; j++){
-    display.drawPixel(j, abs(main_array[j]/2),SSD1306_WHITE);
+    display.drawPixel(j, 64 - abs(main_array[j]/2),SSD1306_WHITE);
+    if(j%2==0){
+      display.drawPixel(j, 64 - abs(second_array[j]/2),SSD1306_WHITE);
+    }
     if(j%3==0){
-      display.drawPixel(j, abs(second_array[j]/2),SSD1306_WHITE);
+      display.drawPixel(j, 64 - abs(third_array[j]/2),SSD1306_WHITE);
     }
     
   }
